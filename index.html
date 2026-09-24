@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLITCH RUN // pursuit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="stage">
+    <canvas id="game"></canvas>
+
+    <!-- glitch overlays -->
+    <div class="scanlines"></div>
+    <div class="noise"></div>
+    <div class="vignette"></div>
+
+    <!-- HUD -->
+    <div id="hud">
+      <div class="hud-block">
+        <span class="label">HEAT</span>
+        <div class="bar"><div id="heatBar"></div></div>
+      </div>
+      <div class="hud-block">
+        <span class="label">SPEED</span>
+        <span id="speed">0</span>
+      </div>
+      <div class="hud-block">
+        <span class="label">SURVIVED</span>
+        <span id="time">0.0</span>
+      </div>
+    </div>
+
+    <div id="busted" class="hidden">
+      <h1>BUSTED</h1>
+      <p>PRESS <b>R</b> TO RUN AGAIN</p>
+    </div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
