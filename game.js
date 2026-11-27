@@ -128,12 +128,18 @@ class Cop {
     this.maxSpeed = 355;
     this.accel = 430;
     this.turnRate = 2.1;
+    this.route = null;
+    this.routeTimer = 0;
   }
 
   update(dt, target) {
-    const dx = target.x - this.x;
-    const dy = target.y - this.y;
-    const desired = Math.atan2(dy, dx);
+    this.routeTimer-=dt;
+    if(this.routeTimer<=0 || (this.route && Math.hypot(this.route.x-this.x,this.route.y-this.y)<22)){
+      this.route=policeWaypoint(this,target);this.routeTimer=.20;
+    }
+    const aim=this.route||target;
+    const dx=aim.x-this.x,dy=aim.y-this.y;
+    const desired=Math.atan2(dy,dx);
     const diff = angleDiff(desired, this.angle);
 
     // steer toward the player as hard as it can
@@ -141,7 +147,8 @@ class Cop {
 
     // only floor it when roughly pointed the right way
     const alignment = Math.max(0, Math.cos(diff));
-    this.speed = Math.min(this.speed + this.accel * alignment * dt, this.maxSpeed);
+    const cornerSpeed=this.maxSpeed*(.35+.65*alignment);
+    this.speed += clamp(cornerSpeed-this.speed,-650*dt,this.accel*dt);
 
     this.x += Math.cos(this.angle) * this.speed * dt;
     this.y += Math.sin(this.angle) * this.speed * dt;
@@ -171,6 +178,7 @@ function reset() {
   game.bustedTime = 0;
   cam.x = 0; cam.y = 0; cam.shake = 0; cam.zoom=1;
   resetEffects();
+  resetStreetObjects();
   document.getElementById('busted').classList.add('hidden');
   spawnCop();
 }
@@ -203,6 +211,7 @@ function update(dt) {
   const p = game.player;
   p.update(dt);
   collideCity(p,true);
+  collideStreetObjects(p,true);
   game.elapsed += dt;
   recordTrail(p,dt);
 
@@ -221,7 +230,7 @@ function update(dt) {
   }
 
   // cops
-  for (const c of game.cops) { c.update(dt,p); collideCity(c,false); }
+  for (const c of game.cops) { c.update(dt,p); collideCity(c,false); collideStreetObjects(c,false); }
 
   // cop-cop separation (stops them stacking into one blob)
   for (let i = 0; i < game.cops.length; i++) {
@@ -238,6 +247,9 @@ function update(dt) {
       }
     }
   }
+
+  // Separation can push patrol cars into a building; correct before capture checks.
+  for(const c of game.cops)collideCity(c,false);
 
   // busted?
   for (const c of game.cops) {
@@ -293,6 +305,7 @@ function render() {
 
   drawDistrict(sctx,ox,oy);
   drawWetRoad(sctx,ox,oy);
+  drawStreetObjects(sctx,ox,oy);
   drawEffects(sctx,ox,oy);
   // cops
   for (const c of game.cops) {
@@ -310,6 +323,7 @@ function render() {
   drawCrashSequence(ctx,view);
   drawDrivingFeedback(ctx,p);
   drawWallFeedback(ctx);
+  drawSmashFeedback(ctx);
 
   /* ---------- HUD ---------- */
   document.getElementById('heatBar').style.width = clamp(game.heat * 2, 0, 100) + '%';

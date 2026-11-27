@@ -69,3 +69,20 @@ test('crash hit-stop slows debris while keeping restart timer and score real',()
  assert.ok(b.run('cam.zoom>1.2 && cam.zoom<=1.3'));
  b.events.keydown({code:'KeyR'});assert.equal(b.run('cam.zoom'),1);
 });
+
+test('blocked police route chooses an accessible corner',()=>{
+ const b=boot();
+ assert.ok(b.run("(()=>{const c=new Cop(270,120),p={x:450,y:120};c.angle=0;const w=policeWaypoint(c,p);return !clearRoute(c.x,c.y,p.x,p.y,c.radius+4)&&!!w&&clearRoute(c.x,c.y,w.x,w.y,c.radius+1);})()"));
+ assert.equal(b.run("policeWaypoint(new Cop(0,0),{x:0,y:-400})"),null);
+});
+test('street props break once, reduce speed, and reset',()=>{
+ const b=boot();
+ const res=b.run("(()=>{const o=streetObjectAt(1,0),p=new Car(o.x,o.y);p.vx=250;collideStreetObjects(p,true);const n=effects.fragments.length,s=p.speed;collideStreetObjects(p,true);return {n,s,again:effects.fragments.length,broken:brokenStreetObjects.has(o.id)};})()");
+ assert.ok(res.broken&&res.n>0&&res.s<250);assert.equal(res.n,res.again);
+ b.run('tickFragments(2)');assert.equal(b.run('effects.fragments.length'),0);
+ b.run('reset()');assert.equal(b.run('brokenStreetObjects.size'),0);
+});
+test('slow cars do not destroy props and debris is bounded',()=>{
+ const b=boot();
+ assert.ok(b.run("(()=>{const o=streetObjectAt(1,0),p=new Car(o.x,o.y);p.vx=40;collideStreetObjects(p,true);if(brokenStreetObjects.size)return false;for(let n=0;n<100;n++)scatterFragments(o,0,300);return effects.fragments.length<=96;})()"));
+});
