@@ -4,7 +4,7 @@ const fxButton=document.getElementById('fx');
 function syncFX(){fxButton.textContent=reduced?'FX: LOW':'FX: FULL';fxButton.setAttribute('aria-pressed',String(reduced));}
 fxButton.addEventListener('click',()=>{reduced=!reduced;syncFX();});syncFX();
 const effects={};
-function resetEffects(){Object.assign(effects,{sparks:[],trails:[],rings:[],hit:0,cooldown:0,clock:0,near:0,wallCooldown:0,wallHit:0});}
+function resetEffects(){Object.assign(effects,{sparks:[],trails:[],rings:[],hit:0,cooldown:0,clock:0,near:0,wallCooldown:0,wallHit:0,smash:0,fragments:[]});}
 const random=(a,b)=>a+Math.random()*(b-a);
 function burst(x,y,color,count){
   if(reduced)count=Math.min(count,5);
@@ -15,6 +15,8 @@ function burst(x,y,color,count){
 function crashEffect(p){cam.shake=reduced?0:18;effects.hit=.15;burst(p.x,p.y,'#ffecbb',42);burst(p.x,p.y,'#ff397d',24);}
 function tickEffects(dt,realDt=dt){
   effects.near=Math.max(0,effects.near-dt);
+  effects.smash=Math.max(0,effects.smash-dt);
+  tickFragments(dt);
   effects.wallCooldown=Math.max(0,effects.wallCooldown-dt);
   effects.wallHit=Math.max(0,effects.wallHit-dt);
   effects.hit=Math.max(0,effects.hit-realDt);effects.cooldown=Math.max(0,effects.cooldown-dt);cam.shake*=Math.exp(-12*dt);
@@ -32,6 +34,7 @@ function recordTrail(p,dt){
   if(effects.trails.length>96)effects.trails.splice(0,effects.trails.length-96);
 }
 function drawEffects(g,ox,oy){
+  drawFragments(g,ox,oy);
   g.save();
   for(const p of effects.trails){g.globalAlpha=.55*p.life/p.max;g.strokeStyle=p.color;g.lineWidth=p.width;g.beginPath();g.moveTo(p.x+ox,p.y+oy);g.lineTo(p.x+ox-p.vx*.045,p.y+oy-p.vy*.045);g.stroke();}
   for(const r of effects.rings){const t=1-r.life/.48;g.globalAlpha=(1-t)*.7;g.strokeStyle=r.color;g.lineWidth=2;g.beginPath();g.arc(r.x+ox,r.y+oy,10+t*100,0,Math.PI*2);g.stroke();}
@@ -172,4 +175,28 @@ function drawCrashSequence(g,view){
   }
   g.globalAlpha=a;g.fillStyle='#ffe0b0';g.font='bold 13px monospace';g.textAlign='center';
   g.fillText('SIGNAL LOST // IMPACT',W/2,H-35);g.restore();
+}
+
+function scatterFragments(o,heading,speed){
+  const count=reduced?3:9;
+  for(let n=0;n<count;n++){
+    const a=heading+random(-1.2,1.2),s=Math.min(260,speed*random(.25,.8)),life=random(.4,.9);
+    effects.fragments.push({x:o.x,y:o.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,angle:random(0,6.28),spin:random(-12,12),life,max:life,size:random(2,6),color:o.kind==='barrier'?'#eaa34e':'#65bdc9'});
+  }
+  if(effects.fragments.length>96)effects.fragments.splice(0,effects.fragments.length-96);
+}
+function tickFragments(dt){
+  for(const p of effects.fragments){p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.angle+=p.spin*dt;p.vx*=Math.exp(-3*dt);p.vy*=Math.exp(-3*dt);}
+  effects.fragments=effects.fragments.filter(p=>p.life>0);
+}
+function drawFragments(g,ox,oy){
+  for(const p of effects.fragments){
+    g.save();g.translate(p.x+ox,p.y+oy);g.rotate(p.angle);g.globalAlpha=Math.min(1,p.life/p.max*2);g.fillStyle=p.color;
+    g.fillRect(-p.size/2,-p.size/3,p.size,p.size*.66);g.restore();
+  }
+}
+function drawSmashFeedback(g){
+  if(game.state!=='playing'||effects.smash<=0)return;
+  g.save();g.globalAlpha=Math.min(1,effects.smash*3);g.fillStyle='#ffcb8a';
+  g.font='bold 13px monospace';g.textAlign='center';g.fillText('STREET CHAOS //',W/2,H-78);g.restore();
 }
