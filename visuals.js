@@ -4,7 +4,7 @@ const fxButton=document.getElementById('fx');
 function syncFX(){fxButton.textContent=reduced?'FX: LOW':'FX: FULL';fxButton.setAttribute('aria-pressed',String(reduced));}
 fxButton.addEventListener('click',()=>{reduced=!reduced;syncFX();});syncFX();
 const effects={};
-function resetEffects(){Object.assign(effects,{sparks:[],trails:[],rings:[],hit:0,cooldown:0,clock:0});}
+function resetEffects(){Object.assign(effects,{sparks:[],trails:[],rings:[],hit:0,cooldown:0,clock:0,near:0});}
 const random=(a,b)=>a+Math.random()*(b-a);
 function burst(x,y,color,count){
   if(reduced)count=Math.min(count,5);
@@ -14,6 +14,7 @@ function burst(x,y,color,count){
 }
 function crashEffect(p){cam.shake=reduced?0:18;effects.hit=.15;burst(p.x,p.y,'#ffecbb',42);burst(p.x,p.y,'#ff397d',24);}
 function tickEffects(dt){
+  effects.near=Math.max(0,effects.near-dt);
   effects.hit=Math.max(0,effects.hit-dt);effects.cooldown=Math.max(0,effects.cooldown-dt);cam.shake*=Math.exp(-12*dt);
   for(const p of effects.sparks){p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.exp(-4*dt);p.vy*=Math.exp(-4*dt);}
   for(const p of effects.trails)p.life-=dt;for(const r of effects.rings)r.life-=dt;
@@ -22,6 +23,9 @@ function tickEffects(dt){
 function recordTrail(p,dt){
   effects.clock+=dt;if(effects.clock<.032||p.speed<90)return;effects.clock=0;
   const side=Math.abs(p.vx*-Math.sin(p.angle)+p.vy*Math.cos(p.angle));
+  if(!reduced && p.drifting && effects.sparks.length<140){
+    const life=.28;effects.sparks.push({x:p.x-Math.cos(p.angle)*16,y:p.y-Math.sin(p.angle)*16,vx:-p.vx*.25+random(-40,40),vy:-p.vy*.25+random(-40,40),life,max:life,color:'#ffb06b'});
+  }
   for(const sign of [-1,1]){const life=side>55?.65:.24;effects.trails.push({x:p.x-Math.cos(p.angle)*13-sign*Math.sin(p.angle)*8,y:p.y-Math.sin(p.angle)*13+sign*Math.cos(p.angle)*8,vx:p.vx,vy:p.vy,life,max:life,width:side>55?3:1.5,color:side>55?'#ff78c9':'#ab316c'});}
   if(effects.trails.length>96)effects.trails.splice(0,effects.trails.length-96);
 }
@@ -61,4 +65,67 @@ function drawImpact(g,p,ox,oy){
     const x=p.x+ox,y=p.y+oy;g.save();g.globalAlpha=effects.hit/.15;g.strokeStyle='#fff0bf';g.lineWidth=3;
     for(let k=0;k<12;k++){const a=k*Math.PI/6;g.beginPath();g.moveTo(x+Math.cos(a)*24,y+Math.sin(a)*24);g.lineTo(x+Math.cos(a)*73,y+Math.sin(a)*73);g.stroke();}g.restore();
   }
+}
+
+// Stable, seeded rain positions: no per-frame random flicker or particle allocation.
+const rainDrops=Array.from({length:105},(_,n)=>({
+  x:((n*127.13+31)%997)/997,
+  y:((n*79.71+63)%563)/563,
+  speed:180+(n*37)%170,
+  length:8+(n*13)%19,
+  alpha:.06+(n%5)*.022
+}));
+const wrap=(x,n)=>((x%n)+n)%n;
+function drawWetRoad(g,ox,oy){
+  // Elongated reflections are stylized ground light, not a second copy of the cars.
+  g.save();
+  const tile=240;
+  const x0=Math.floor((cam.x-W/2-100)/tile),x1=Math.ceil((cam.x+W/2+100)/tile);
+  const y0=Math.floor((cam.y-H/2-100)/tile),y1=Math.ceil((cam.y+H/2+100)/tile);
+  for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){
+    const xx=x*tile+ox,yy=y*tile+oy;
+    g.fillStyle='rgba(255,62,148,.045)';g.fillRect(xx+22,yy-50,11,100);
+    g.fillStyle='rgba(55,214,255,.055)';g.fillRect(xx-50,yy+21,100,10);
+    g.strokeStyle='rgba(117,178,203,.11)';g.lineWidth=1;
+    g.beginPath();g.moveTo(xx-45,yy-45);g.lineTo(xx+45,yy-45);g.moveTo(xx-45,yy+45);g.lineTo(xx+45,yy+45);g.stroke();
+  }
+  for(const car of [game.player,...game.cops]){
+    const x=car.x+ox,y=car.y+oy;
+    const light=g.createRadialGradient(x,y,3,x,y,65);
+    const player=car===game.player;
+    light.addColorStop(0,player?'rgba(255,45,149,.21)':'rgba(0,229,255,.17)');
+    light.addColorStop(1,'rgba(0,0,0,0)');
+    g.fillStyle=light;g.fillRect(x-65,y-65,130,130);
+  }
+  g.restore();
+}
+function drawRain(g){
+  if(reduced)return;
+  const time=game.elapsed+game.bustedTime;
+  g.save();g.lineWidth=1;
+  // Five opacity buckets keep draw calls bounded.
+  for(let group=0;group<5;group++){
+    g.strokeStyle='rgba(178,218,255,'+(.06+group*.022)+')';
+    g.beginPath();
+    for(let n=group;n<rainDrops.length;n+=5){
+      const d=rainDrops[n];
+      const x=wrap(d.x*W-time*65-cam.x*.12,W+40)-20;
+      const y=wrap(d.y*H+time*d.speed-cam.y*.12,H+40)-20;
+      g.moveTo(x,y);g.lineTo(x-5,y+d.length);
+    }
+    g.stroke();
+  }
+  g.restore();
+}
+function drawDrivingFeedback(g,p){
+  if(game.state!=='playing')return;
+  const near=effects.near>0,drift=p.drifting;
+  if(!near&&!drift)return;
+  g.save();
+  g.globalAlpha=near?Math.min(1,effects.near*3):.85;
+  g.font='bold 15px monospace';g.textAlign='center';
+  g.fillStyle='rgba(5,9,18,.82)';g.fillRect(W/2-88,H-62,176,30);
+  g.fillStyle=near?'#90f0ff':'#ff9fce';
+  g.fillText(near?'CLOSE CALL //':'DRIFT //',W/2,H-42);
+  g.restore();
 }
