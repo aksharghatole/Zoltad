@@ -24,9 +24,10 @@ const angleDiff = (a, b) => {
 
 /* ---------- input ---------- */
 const keys = {};
+addEventListener('blur',()=>{for(const k of Object.keys(keys))keys[k]=false;});
 addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (e.code === 'KeyR' && game.state === 'busted') reset();
+  if (e.code === 'KeyR' && game.state === 'busted' && game.bustedTime >= .45) reset();
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
@@ -162,6 +163,7 @@ function reset() {
   game.spawnTimer = 1.5;
   game.bustedTime = 0;
   cam.x = 0; cam.y = 0; cam.shake = 0;
+  resetEffects();
   document.getElementById('busted').classList.add('hidden');
   spawnCop();
 }
@@ -177,15 +179,17 @@ function spawnCop() {
    UPDATE
    ========================================================= */
 function update(dt) {
+  tickEffects(dt);
   if (game.state === 'busted') {
     game.bustedTime += dt;
-    cam.shake = Math.max(cam.shake, 26 - game.bustedTime * 30);
+    if(game.bustedTime>=.45) document.getElementById('busted').classList.remove('hidden');
     return;
   }
 
   const p = game.player;
   p.update(dt);
   game.elapsed += dt;
+  recordTrail(p,dt);
 
   // heat rises with speed, bleeds off slowly
   game.heat += (p.speed / p.maxSpeed) * 6.5 * dt - 1.4 * dt;
@@ -226,44 +230,35 @@ function update(dt) {
     if (Math.hypot(dx, dy) < c.radius + p.radius) {
       game.state = 'busted';
       game.bustedTime = 0;
-      cam.shake = 30;
-      document.getElementById('busted').classList.remove('hidden');
+      crashEffect(p);
       break;
+    } else if(Math.hypot(dx,dy)<65 && p.speed>180 && effects.cooldown===0){
+      effects.cooldown=1.1;burst(p.x,p.y,'#71e9ff',12);if(!reduced)cam.shake=4;
     }
   }
 
   // camera follow
-  cam.x += (p.x - cam.x) * 0.12;
-  cam.y += (p.y - cam.y) * 0.12;
+  const follow=1-Math.exp(-8*dt);
+  cam.x+=(p.x+p.vx*.14-cam.x)*follow;
+  cam.y+=(p.y+p.vy*.14-cam.y)*follow;
 }
 
 /* =========================================================
    RENDER  (draws into the offscreen `scene` buffer)
    ========================================================= */
-function drawCar(g, x, y, angle, color) {
-  g.save();
-  g.translate(x, y);
-  g.rotate(angle);
-
-  // cheap glow
-  g.globalAlpha = 0.22;
-  g.fillStyle = color;
-  g.fillRect(-25, -17, 50, 34);
-  g.globalAlpha = 1;
-
-  // body
-  g.fillStyle = color;
-  g.fillRect(-18, -11, 36, 22);
-
-  // cabin
-  g.fillStyle = 'rgba(4, 2, 12, 0.75)';
-  g.fillRect(-3, -8, 11, 16);
-
-  // nose light
-  g.fillStyle = 'rgba(255,255,255,0.85)';
-  g.fillRect(15, -8, 3, 4);
-  g.fillRect(15, 4, 3, 4);
-
+function drawCar(g,x,y,angle,color,police=false){
+  g.save();g.translate(x,y);g.rotate(angle);
+  g.globalAlpha=.15;g.fillStyle=color;g.beginPath();g.ellipse(0,0,31,22,0,0,Math.PI*2);g.fill();g.globalAlpha=1;
+  const beam=g.createLinearGradient(17,0,105,0);beam.addColorStop(0,'rgba(190,240,255,.23)');beam.addColorStop(1,'rgba(190,240,255,0)');
+  g.fillStyle=beam;g.beginPath();g.moveTo(16,-9);g.lineTo(105,-28);g.lineTo(105,28);g.lineTo(16,9);g.closePath();g.fill();
+  g.fillStyle='#02040a';for(const xx of [-13,10])for(const yy of [-13,9])g.fillRect(xx,yy,8,4);
+  g.fillStyle='#080b16';g.strokeStyle=color;g.lineWidth=1.8;
+  g.beginPath();g.moveTo(-19,-9);g.lineTo(-14,-12);g.lineTo(11,-12);g.lineTo(20,-7);g.lineTo(20,7);g.lineTo(11,12);g.lineTo(-14,12);g.lineTo(-19,9);g.closePath();g.fill();g.stroke();
+  g.fillStyle=color;g.globalAlpha=.55;g.fillRect(-17,-8,8,16);g.fillRect(9,-7,8,14);g.globalAlpha=1;
+  g.fillStyle='#173047';g.beginPath();g.moveTo(-6,-8);g.lineTo(6,-7);g.lineTo(9,0);g.lineTo(6,7);g.lineTo(-6,8);g.closePath();g.fill();g.strokeStyle='#80b6d0';g.lineWidth=.8;g.stroke();
+  g.fillStyle='#eafcff';g.fillRect(17,-8,3,4);g.fillRect(17,4,3,4);g.fillStyle='#ff426a';g.fillRect(-19,-8,3,5);g.fillRect(-19,3,3,5);
+  if(police){const t=reduced?0:Math.floor(game.elapsed*2)%2;g.fillStyle=t?'#367dff':'#ff416d';g.fillRect(-3,-9,5,8);g.fillStyle=t?'#ff416d':'#367dff';g.fillRect(-3,1,5,8);}
+  else{g.fillStyle='#ffb4dc';g.fillRect(-1,-1,17,2);}
   g.restore();
 }
 
@@ -271,78 +266,27 @@ function render() {
   const p = game.player;
 
   let sx = 0, sy = 0;
-  if (cam.shake > 0.4) {
+  if (!reduced && cam.shake > 0.4) {
     sx = (Math.random() - 0.5) * cam.shake;
     sy = (Math.random() - 0.5) * cam.shake;
-    cam.shake *= 0.9;
+
   }
 
   const ox = W / 2 - cam.x + sx;
   const oy = H / 2 - cam.y + sy;
 
-  // background
-  sctx.fillStyle = '#08060f';
-  sctx.fillRect(0, 0, W, H);
-
-  // neon grid
-  const GS = 220;
-  const startX = Math.floor((cam.x - W / 2) / GS) * GS;
-  const endX   = cam.x + W / 2 + GS;
-  const startY = Math.floor((cam.y - H / 2) / GS) * GS;
-  const endY   = cam.y + H / 2 + GS;
-
-  sctx.lineWidth = 2;
-  sctx.strokeStyle = 'rgba(130, 0, 220, 0.35)';
-  sctx.beginPath();
-  for (let gx = startX; gx <= endX; gx += GS) {
-    const X = gx + ox;
-    sctx.moveTo(X, 0); sctx.lineTo(X, H);
-  }
-  for (let gy = startY; gy <= endY; gy += GS) {
-    const Y = gy + oy;
-    sctx.moveTo(0, Y); sctx.lineTo(W, Y);
-  }
-  sctx.stroke();
-
+  drawDistrict(sctx,ox,oy);
+  drawEffects(sctx,ox,oy);
   // cops
   for (const c of game.cops) {
-    drawCar(sctx, c.x + ox, c.y + oy, c.angle, '#00e5ff');
+    drawCar(sctx, c.x + ox, c.y + oy, c.angle, '#00e5ff', true);
   }
 
   // player
   drawCar(sctx, p.x + ox, p.y + oy, p.angle, '#ff2d95');
 
-  /* ---------- post-process: glitch onto the visible canvas ---------- */
-  const intensity = clamp(game.heat / 28, 0, 1) + (game.state === 'busted' ? 0.8 : 0);
-  const I = clamp(intensity, 0, 1.4);
-
-  ctx.clearRect(0, 0, W, H);
-
-  if (I < 0.06) {
-    ctx.drawImage(scene, 0, 0);
-  } else {
-    // horizontal slice tearing
-    const bands = 40;
-    for (let i = 0; i < bands; i++) {
-      const y0 = Math.floor((i * H) / bands);
-      const y1 = Math.floor(((i + 1) * H) / bands);
-      const bh = y1 - y0;
-      let dx = 0;
-      if (Math.random() < 0.13 * I) {
-        dx = (Math.random() - 0.5) * 80 * I;
-      }
-      ctx.drawImage(scene, 0, y0, W, bh, dx, y0, W, bh);
-    }
-
-    // RGB bleed: ghost copy offset a few pixels
-    const off = 2 + 6 * I;
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = 0.16 * I;
-    ctx.drawImage(scene, -off, 0);
-    ctx.drawImage(scene,  off, 0);
-    ctx.restore();
-  }
+  ctx.clearRect(0,0,W,H);ctx.drawImage(scene,0,0);
+  drawImpact(ctx,p,ox,oy);
 
   /* ---------- HUD ---------- */
   document.getElementById('heatBar').style.width = clamp(game.heat * 2, 0, 100) + '%';
@@ -353,16 +297,13 @@ function render() {
 /* =========================================================
    LOOP
    ========================================================= */
-let last = performance.now();
-function loop(now) {
-  let dt = (now - last) / 1000;
-  last = now;
-  dt = Math.min(dt, 0.05);   // don't explode after a tab switch
-
-  update(dt);
-  render();
-  requestAnimationFrame(loop);
+const STEP=1/120;
+let last=performance.now(), accumulator=0;
+function loop(now){
+  const dt=Math.max(0,Math.min((now-last)/1000,.10));last=now;accumulator+=dt;
+  while(accumulator+1e-10>=STEP){update(STEP);accumulator=Math.max(0,accumulator-STEP);}
+  render();requestAnimationFrame(loop);
 }
-
+document.addEventListener('visibilitychange',()=>{last=performance.now();accumulator=0;for(const k of Object.keys(keys))keys[k]=false;});
 reset();
 requestAnimationFrame(loop);
