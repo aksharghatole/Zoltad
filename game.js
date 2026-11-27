@@ -47,6 +47,10 @@ class Car {
     this.radius = 17;
 
     this.maxSpeed = 430;
+    this.nitro = 65;
+    this.boosting = false;
+    this.boostLocked = false;
+    this.coastLimit = this.maxSpeed;
     this.accel = 560;
     this.reverseAccel = 280;
     this.brakePower = 950;
@@ -59,6 +63,12 @@ class Car {
 
   get speed() { return Math.hypot(this.vx, this.vy); }
 
+  speedLimit(dt){
+    this.coastLimit=this.maxSpeed+(this.coastLimit-this.maxSpeed)*Math.exp(-3.2*dt);
+    if(this.coastLimit-this.maxSpeed<.5)this.coastLimit=this.maxSpeed;
+    return this.coastLimit;
+  }
+
   update(dt) {
     const throttle = (keys.KeyW || keys.ArrowUp) ? 1 : 0;
     const braking  = (keys.KeyS || keys.ArrowDown) ? 1 : 0;
@@ -70,11 +80,17 @@ class Car {
     const handbrake=!!keys.Space && this.speed>75;
     const fx = Math.cos(this.angle), fy = Math.sin(this.angle);
     const forwardSpeed = this.vx * fx + this.vy * fy;
+    const boostHeld=!!(keys.ShiftLeft||keys.ShiftRight);
+    if(!boostHeld)this.boostLocked=false;
+    this.boosting=boostHeld&&!this.boostLocked&&!!throttle&&!braking&&!handbrake&&forwardSpeed>=-5&&this.nitro>0;
+    if(this.boosting){this.nitro=Math.max(0,this.nitro-32*dt);if(this.nitro===0)this.boostLocked=true;}
+    else this.nitro=Math.min(100,this.nitro+(this.drifting?9:3)*dt);
 
     // --- engine / brakes ---
     if (throttle) {
-      this.vx += fx * this.accel * dt;
-      this.vy += fy * this.accel * dt;
+      const power=this.accel*(this.boosting?1.9:1);
+      this.vx += fx * power * dt;
+      this.vy += fy * power * dt;
     }
     if (braking) {
       if (forwardSpeed > 15) {
@@ -106,9 +122,11 @@ class Car {
 
     // --- clamp top speed ---
     const sp = this.speed;
-    if (sp > this.maxSpeed) {
-      this.vx = this.vx / sp * this.maxSpeed;
-      this.vy = this.vy / sp * this.maxSpeed;
+    if(this.boosting)this.coastLimit=600;
+    const limit=this.boosting?600:this.speedLimit(dt);
+    if (sp > limit) {
+      this.vx = this.vx / sp * limit;
+      this.vy = this.vy / sp * limit;
     }
 
     this.x += this.vx * dt;
@@ -214,6 +232,7 @@ function update(dt) {
   collideStreetObjects(p,true);
   game.elapsed += dt;
   recordTrail(p,dt);
+  recordBoost(p,dt);
 
   // heat rises with speed, bleeds off slowly
   game.heat += (p.speed / p.maxSpeed) * 6.5 * dt - 1.4 * dt;
@@ -260,7 +279,7 @@ function update(dt) {
       crashEffect(p);
       break;
     } else if(Math.hypot(dx,dy)<65 && p.speed>180 && effects.cooldown===0){
-      effects.cooldown=1.1; effects.near=.85; burst(p.x,p.y,'#71e9ff',12);if(!reduced)cam.shake=4;
+      effects.cooldown=1.1; effects.near=.85; p.nitro=Math.min(100,p.nitro+12); burst(p.x,p.y,'#71e9ff',12);if(!reduced)cam.shake=4;
     }
   }
 
@@ -307,6 +326,7 @@ function render() {
   drawWetRoad(sctx,ox,oy);
   drawStreetObjects(sctx,ox,oy);
   drawEffects(sctx,ox,oy);
+  drawBoost(sctx,ox,oy,p);
   // cops
   for (const c of game.cops) {
     drawCar(sctx, c.x + ox, c.y + oy, c.angle, '#00e5ff', true);
@@ -324,11 +344,14 @@ function render() {
   drawDrivingFeedback(ctx,p);
   drawWallFeedback(ctx);
   drawSmashFeedback(ctx);
+  drawBoostOverlay(ctx,p);
 
   /* ---------- HUD ---------- */
   document.getElementById('heatBar').style.width = clamp(game.heat * 2, 0, 100) + '%';
   document.getElementById('speed').textContent = Math.round(p.speed);
   document.getElementById('time').textContent = game.elapsed.toFixed(1);
+  document.getElementById('nitroBar').style.width = Math.round(p.nitro)+'%';
+  document.getElementById('nitro').textContent = Math.round(p.nitro)+'%';
 }
 
 /* =========================================================

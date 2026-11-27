@@ -86,3 +86,19 @@ test('slow cars do not destroy props and debris is bounded',()=>{
  const b=boot();
  assert.ok(b.run("(()=>{const o=streetObjectAt(1,0),p=new Car(o.x,o.y);p.vx=40;collideStreetObjects(p,true);if(brokenStreetObjects.size)return false;for(let n=0;n<100;n++)scatterFragments(o,0,300);return effects.fragments.length<=96;})()"));
 });
+
+test('nitro boosts speed, consumes charge and tapers speed on release',()=>{
+ const b=boot();
+ const out=b.run("(()=>{const p=new Car(0,0);keys.KeyW=true;keys.ShiftLeft=true;for(let n=0;n<180;n++)p.update(STEP);const boosted=p.speed,charge=p.nitro;keys.ShiftLeft=false;p.update(STEP);const released=p.speed;for(let n=0;n<480;n++)p.update(STEP);return {boosted,charge,released,final:p.speed,nitro:p.nitro};})()");
+ assert.ok(out.boosted>430&&out.boosted<=600);assert.ok(out.charge<65);assert.ok(out.released>430&&out.released<=600);assert.ok(out.final<=430.001);assert.ok(out.nitro>out.charge);
+});
+test('empty boost locks until released; reverse and braking do not consume nitro',()=>{
+ const b=boot();
+ assert.ok(b.run("(()=>{const p=new Car(0,0);p.nitro=.01;keys.KeyW=true;keys.ShiftLeft=true;p.update(STEP);p.update(STEP);if(!p.boostLocked||p.boosting)return false;keys.ShiftLeft=false;p.update(STEP);if(p.boostLocked)return false;keys.ShiftLeft=true;keys.KeyS=true;const n=p.nitro;p.update(STEP);return !p.boosting&&p.nitro>=n;})()"));
+});
+test('boost trails remain bounded and clear on restart',()=>{
+ const b=boot();
+ b.run('game.player.boosting=true;for(let n=0;n<100;n++)recordBoost(game.player,.03);render()');
+ assert.ok(b.run('effects.boostTrails.length<=48'));
+ b.run('reset()');assert.equal(b.run('effects.boostTrails.length'),0);
+});

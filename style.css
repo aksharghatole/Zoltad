@@ -136,3 +136,8 @@ body{background:radial-gradient(ellipse at 50% 40%,#18142a,#070810 65%);overflow
 #busted h2{font-size:clamp(28px,9vw,96px);letter-spacing:.12em}
 @media(max-width:480px){.hud-block{padding:4px 6px}.label{font-size:8px}.controls{font-size:9px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+#nitroBar{height:100%;width:65%;background:linear-gradient(90deg,#3979ff,#83e9ff,#fff0b6);box-shadow:0 0 7px #448bff66}
+.nitro-block{align-items:flex-end}.nitro-block .bar{width:clamp(48px,12vw,120px)}
+#nitro{color:#b6eaff;font-variant-numeric:tabular-nums}
+@media(max-width:480px){#hud{gap:3px}.hud-block{padding:3px 4px}.bar{width:45px}.nitro-block .bar{width:42px}}

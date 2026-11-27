@@ -4,7 +4,7 @@ const fxButton=document.getElementById('fx');
 function syncFX(){fxButton.textContent=reduced?'FX: LOW':'FX: FULL';fxButton.setAttribute('aria-pressed',String(reduced));}
 fxButton.addEventListener('click',()=>{reduced=!reduced;syncFX();});syncFX();
 const effects={};
-function resetEffects(){Object.assign(effects,{sparks:[],trails:[],rings:[],hit:0,cooldown:0,clock:0,near:0,wallCooldown:0,wallHit:0,smash:0,fragments:[]});}
+function resetEffects(){Object.assign(effects,{sparks:[],trails:[],rings:[],hit:0,cooldown:0,clock:0,near:0,wallCooldown:0,wallHit:0,smash:0,fragments:[],boostClock:0,boostTrails:[]});}
 const random=(a,b)=>a+Math.random()*(b-a);
 function burst(x,y,color,count){
   if(reduced)count=Math.min(count,5);
@@ -17,6 +17,8 @@ function tickEffects(dt,realDt=dt){
   effects.near=Math.max(0,effects.near-dt);
   effects.smash=Math.max(0,effects.smash-dt);
   tickFragments(dt);
+  for(const p of effects.boostTrails)p.life-=dt;
+  effects.boostTrails=effects.boostTrails.filter(p=>p.life>0);
   effects.wallCooldown=Math.max(0,effects.wallCooldown-dt);
   effects.wallHit=Math.max(0,effects.wallHit-dt);
   effects.hit=Math.max(0,effects.hit-realDt);effects.cooldown=Math.max(0,effects.cooldown-dt);cam.shake*=Math.exp(-12*dt);
@@ -199,4 +201,51 @@ function drawSmashFeedback(g){
   if(game.state!=='playing'||effects.smash<=0)return;
   g.save();g.globalAlpha=Math.min(1,effects.smash*3);g.fillStyle='#ffcb8a';
   g.font='bold 13px monospace';g.textAlign='center';g.fillText('STREET CHAOS //',W/2,H-78);g.restore();
+}
+
+// Overdrive: world-space exhaust streaks; no extra physics entities.
+function recordBoost(p,dt){
+  effects.boostClock+=dt;
+  if(!p.boosting||effects.boostClock<.025)return;
+  effects.boostClock=0;
+  const ca=Math.cos(p.angle),sa=Math.sin(p.angle);
+  for(const side of [-1,1]){
+    const life=reduced?.12:.28;
+    effects.boostTrails.push({x:p.x-ca*23-sa*side*6,y:p.y-sa*23+ca*side*6,angle:p.angle,life,max:life});
+  }
+  if(effects.boostTrails.length>48)effects.boostTrails.splice(0,effects.boostTrails.length-48);
+}
+function drawBoost(g,ox,oy,p){
+  g.save();
+  for(const trail of effects.boostTrails){
+    const a=trail.life/trail.max;
+    g.save();g.translate(trail.x+ox,trail.y+oy);g.rotate(trail.angle);
+    g.globalAlpha=a*.65;g.fillStyle='#467cff';g.fillRect(-26,-2,26,4);
+    g.globalAlpha=a*.8;g.fillStyle='#a8f5ff';g.fillRect(-13,-1,13,2);g.restore();
+  }
+  if(p.boosting&&game.state==='playing'){
+    g.translate(p.x+ox,p.y+oy);g.rotate(p.angle);
+    const len=reduced?24:32+6*Math.sin(game.elapsed*27);
+    for(const y of [-6,6]){
+      g.fillStyle='#398cff';g.beginPath();g.moveTo(-19,y-4);g.lineTo(-19-len,y);g.lineTo(-19,y+4);g.closePath();g.fill();
+      g.fillStyle='#ffc373';g.beginPath();g.moveTo(-19,y-2);g.lineTo(-19-len*.55,y);g.lineTo(-19,y+2);g.closePath();g.fill();
+    }
+  }
+  g.restore();
+}
+function drawBoostOverlay(g,p){
+  if(!p.boosting||game.state!=='playing')return;
+  g.save();
+  g.fillStyle='#9cecff';g.font='bold 14px monospace';g.textAlign='center';
+  g.fillText('OVERDRIVE //',W/2,H-96);
+  if(!reduced){
+    g.globalAlpha=.24;g.strokeStyle='#71caff';g.lineWidth=2;
+    const heading=Math.atan2(p.vy,p.vx);
+    for(let n=0;n<18;n++){
+      const a=n*Math.PI/9,r=220+((n*49+game.elapsed*290)%170);
+      const x=W/2+Math.cos(a)*r*1.8,y=H/2+Math.sin(a)*r;
+      g.beginPath();g.moveTo(x,y);g.lineTo(x-Math.cos(heading)*54,y-Math.sin(heading)*54);g.stroke();
+    }
+  }
+  g.restore();
 }
