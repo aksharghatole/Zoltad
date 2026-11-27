@@ -51,3 +51,21 @@ test('police ricochet aligns with wall tangent',()=>{
  const b=boot();
  assert.ok(b.run("(()=>{const z=blockAt(1,0),c=new Cop(z.x-10,z.y+40);c.speed=300;collideCity(c,false);return c.speed===150&&c.x<z.x-17&&Math.abs(Math.cos(c.angle))<1e-6;})()"));
 });
+
+test('lens stays within world buffer and maps player position correctly',()=>{
+ const b=boot();
+ assert.ok(b.run("(()=>{cam.zoom=1.3;for(const [x,y] of [[0,0],[960,540],[430,240]]){const v=lensView(x,y);if(v.sx<0||v.sy<0||v.sx+v.w>W+1e-8||v.sy+v.h>H+1e-8||Math.abs(v.x/v.z+v.sx-x)>1e-8)return false;}return true;})()"));
+ const low=boot(true);assert.equal(low.run('cam.zoom=1.3;lensView(300,200).z'),1);
+});
+test('crash hit-stop slows debris while keeping restart timer and score real',()=>{
+ const b=boot();b.run("game.cops=[new Cop(0,0)];update(STEP)");
+ const before=b.run('effects.sparks[0].life');
+ const score=b.run('game.elapsed');
+ b.run('update(STEP);render()');
+ assert.equal(b.run('effects.sparks[0].life'),before);
+ assert.equal(b.run('game.elapsed'),score);
+ b.run('for(let n=0;n<60;n++)update(STEP);render()');
+ assert.equal(b.els.get('busted').classList.hidden,false);
+ assert.ok(b.run('cam.zoom>1.2 && cam.zoom<=1.3'));
+ b.events.keydown({code:'KeyR'});assert.equal(b.run('cam.zoom'),1);
+});

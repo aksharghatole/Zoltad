@@ -27,13 +27,14 @@ const keys = {};
 addEventListener('blur',()=>{for(const k of Object.keys(keys))keys[k]=false;});
 addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (e.code === 'KeyR' && game.state === 'busted' && game.bustedTime >= .45) reset();
+  if (e.code === 'KeyR' && game.state === 'busted' && game.bustedTime >= CRASH_DELAY) reset();
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 
 /* ---------- camera ---------- */
-const cam = { x: 0, y: 0, shake: 0 };
+const cam = { x: 0, y: 0, shake: 0, zoom: 1 };
+const CRASH_DELAY=.45;
 
 /* =========================================================
    PLAYER CAR
@@ -168,7 +169,7 @@ function reset() {
   game.state = 'playing';
   game.spawnTimer = 1.5;
   game.bustedTime = 0;
-  cam.x = 0; cam.y = 0; cam.shake = 0;
+  cam.x = 0; cam.y = 0; cam.shake = 0; cam.zoom=1;
   resetEffects();
   document.getElementById('busted').classList.add('hidden');
   spawnCop();
@@ -188,12 +189,16 @@ function spawnCop() {
    UPDATE
    ========================================================= */
 function update(dt) {
-  tickEffects(dt);
   if (game.state === 'busted') {
     game.bustedTime += dt;
-    if(game.bustedTime>=.45) document.getElementById('busted').classList.remove('hidden');
+    // Short hit-stop, then slow-motion debris. The score and car positions stay frozen.
+    const timeScale=reduced?1:game.bustedTime<.055?0:game.bustedTime<CRASH_DELAY?.32:1;
+    tickEffects(dt*timeScale,dt);
+    updateLens(dt,game.player);
+    if(game.bustedTime>=CRASH_DELAY) document.getElementById('busted').classList.remove('hidden');
     return;
   }
+  tickEffects(dt);
 
   const p = game.player;
   p.update(dt);
@@ -251,6 +256,7 @@ function update(dt) {
   const follow=1-Math.exp(-8*dt);
   cam.x+=(p.x+p.vx*.14-cam.x)*follow;
   cam.y+=(p.y+p.vy*.14-cam.y)*follow;
+  updateLens(dt,p);
 }
 
 /* =========================================================
@@ -297,9 +303,11 @@ function render() {
   drawCar(sctx, p.x + ox, p.y + oy, p.angle, '#ff2d95');
 
   drawBuildings(sctx,ox,oy);
-  ctx.clearRect(0,0,W,H);ctx.drawImage(scene,0,0);
+  const view=lensView(p.x+ox,p.y+oy);
+  ctx.clearRect(0,0,W,H);paintScene(ctx,view);
   drawRain(ctx);
-  drawImpact(ctx,p,ox,oy);
+  drawImpact(ctx,p,view);
+  drawCrashSequence(ctx,view);
   drawDrivingFeedback(ctx,p);
   drawWallFeedback(ctx);
 
