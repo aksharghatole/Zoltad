@@ -13,11 +13,11 @@ function burst(x,y,color,count){
   effects.rings.push({x,y,life:.48,color});if(effects.rings.length>8)effects.rings.shift();
 }
 function crashEffect(p){cam.shake=reduced?0:18;effects.hit=.15;burst(p.x,p.y,'#ffecbb',42);burst(p.x,p.y,'#ff397d',24);}
-function tickEffects(dt){
+function tickEffects(dt,realDt=dt){
   effects.near=Math.max(0,effects.near-dt);
   effects.wallCooldown=Math.max(0,effects.wallCooldown-dt);
   effects.wallHit=Math.max(0,effects.wallHit-dt);
-  effects.hit=Math.max(0,effects.hit-dt);effects.cooldown=Math.max(0,effects.cooldown-dt);cam.shake*=Math.exp(-12*dt);
+  effects.hit=Math.max(0,effects.hit-realDt);effects.cooldown=Math.max(0,effects.cooldown-dt);cam.shake*=Math.exp(-12*dt);
   for(const p of effects.sparks){p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.exp(-4*dt);p.vy*=Math.exp(-4*dt);}
   for(const p of effects.trails)p.life-=dt;for(const r of effects.rings)r.life-=dt;
   effects.sparks=effects.sparks.filter(p=>p.life>0);effects.trails=effects.trails.filter(p=>p.life>0);effects.rings=effects.rings.filter(r=>r.life>0);
@@ -55,7 +55,7 @@ function drawDistrict(g,ox,oy){
   }
   const wash=g.createRadialGradient(W/2,H/2,0,W/2,H/2,W*.65);wash.addColorStop(0,'rgba(95,40,130,.07)');wash.addColorStop(1,'rgba(0,0,12,.38)');g.fillStyle=wash;g.fillRect(0,0,W,H);
 }
-function drawImpact(g,p,ox,oy){
+function drawImpact(g,p,view){
   if(reduced)return;
   if(game.state==='playing'&&p.speed>280){
     const a=(p.speed-280)/150,heading=Math.atan2(p.vy,p.vx);
@@ -63,8 +63,8 @@ function drawImpact(g,p,ox,oy){
     for(let k=0;k<14;k++){const theta=k*Math.PI*2/14,r=200+((k*47+game.elapsed*160)%140),x=W/2+Math.cos(theta)*r*1.7,y=H/2+Math.sin(theta)*r;g.beginPath();g.moveTo(x,y);g.lineTo(x-Math.cos(heading)*38*a,y-Math.sin(heading)*38*a);g.stroke();}g.restore();
   }
   if(effects.hit>0){
-    g.save();g.globalAlpha=Math.min(.7,effects.hit*5);g.filter='grayscale(1) contrast(1.4)';g.drawImage(scene,0,0);g.restore();
-    const x=p.x+ox,y=p.y+oy;g.save();g.globalAlpha=effects.hit/.15;g.strokeStyle='#fff0bf';g.lineWidth=3;
+    g.save();g.globalAlpha=Math.min(.7,effects.hit*5);g.filter='grayscale(1) contrast(1.4)';paintScene(g,view);g.restore();
+    const x=view.x,y=view.y;g.save();g.globalAlpha=effects.hit/.15;g.strokeStyle='#fff0bf';g.lineWidth=3;
     for(let k=0;k<12;k++){const a=k*Math.PI/6;g.beginPath();g.moveTo(x+Math.cos(a)*24,y+Math.sin(a)*24);g.lineTo(x+Math.cos(a)*73,y+Math.sin(a)*73);g.stroke();}g.restore();
   }
 }
@@ -138,4 +138,38 @@ function drawWallFeedback(g){
   g.save();g.globalAlpha=.65*a;g.strokeStyle='#ffc27d';g.lineWidth=2;
   g.beginPath();g.moveTo(12,90);g.lineTo(12,12);g.lineTo(90,12);
   g.moveTo(W-90,H-12);g.lineTo(W-12,H-12);g.lineTo(W-12,H-90);g.stroke();g.restore();
+}
+
+// Crop within the existing world buffer: never reveal unpainted borders.
+function updateLens(dt,p){
+  const target=reduced?1:game.state==='busted'?1.30:1+.10*(1-clamp(p.speed/p.maxSpeed,0,1));
+  if(reduced){cam.zoom=1;return;}
+  cam.zoom+=(target-cam.zoom)*(1-Math.exp(-(game.state==='busted'?12:4)*dt));
+}
+function lensView(px,py){
+  const z=reduced?1:clamp(cam.zoom,1,1.30);
+  const w=W/z,h=H/z;
+  const sx=clamp(px-w/2,0,W-w),sy=clamp(py-h/2,0,H-h);
+  return {sx,sy,w,h,z,x:(px-sx)*z,y:(py-sy)*z};
+}
+function paintScene(g,view){
+  g.drawImage(scene,view.sx,view.sy,view.w,view.h,0,0,W,H);
+}
+function drawCrashSequence(g,view){
+  if(reduced||game.state!=='busted'||game.bustedTime>=CRASH_DELAY)return;
+  const t=clamp(game.bustedTime/CRASH_DELAY,0,1),a=Math.sin(t*Math.PI);
+  const bar=24*a;
+  g.save();
+  g.fillStyle='#060810';g.fillRect(0,0,W,bar);g.fillRect(0,H-bar,W,bar);
+  // Ink-like speed wedges converge on the actual projected collision position.
+  g.globalAlpha=.45*(1-t);g.fillStyle='#090b13';
+  for(let n=0;n<12;n++){
+    const angle=n*Math.PI/6+.13,ca=Math.cos(angle),sa=Math.sin(angle);
+    const outer=Math.hypot(W,H),inner=95+35*t;
+    g.beginPath();g.moveTo(view.x+ca*inner,view.y+sa*inner);
+    g.lineTo(view.x+ca*outer-sa*18,view.y+sa*outer+ca*18);
+    g.lineTo(view.x+ca*outer+sa*8,view.y+sa*outer-ca*8);g.closePath();g.fill();
+  }
+  g.globalAlpha=a;g.fillStyle='#ffe0b0';g.font='bold 13px monospace';g.textAlign='center';
+  g.fillText('SIGNAL LOST // IMPACT',W/2,H-35);g.restore();
 }
