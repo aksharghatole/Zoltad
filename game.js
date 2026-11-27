@@ -51,6 +51,8 @@ class Car {
     this.brakePower = 950;
     this.turnRate = 3.3;   // rad/s
     this.gripLoss = 0.0022; // how much sideways velocity survives per second (lower = grippier)
+    this.steering = 0;
+    this.drifting = false;
     this.drag = 0.45;      // fraction of speed surviving per second
   }
 
@@ -62,6 +64,9 @@ class Car {
     const steer    = ((keys.KeyD || keys.ArrowRight) ? 1 : 0)
                    - ((keys.KeyA || keys.ArrowLeft)  ? 1 : 0);
 
+    // Progressive steering and a deliberate handbrake drift.
+    this.steering += (steer-this.steering)*(1-Math.exp(-13*dt));
+    const handbrake=!!keys.Space && this.speed>75;
     const fx = Math.cos(this.angle), fy = Math.sin(this.angle);
     const forwardSpeed = this.vx * fx + this.vy * fy;
 
@@ -83,18 +88,19 @@ class Car {
     // --- steering (scales with speed, flips in reverse) ---
     const speedFactor = clamp(this.speed / 170, 0, 1);
     const dir = forwardSpeed < -15 ? -1 : 1;
-    this.angle += steer * this.turnRate * speedFactor * dir * dt;
+    this.angle += this.steering * this.turnRate * speedFactor * dir * dt * (handbrake?1.22:1);
 
     // --- grip: bleed off sideways velocity, keep forward velocity ---
     const nfx = Math.cos(this.angle), nfy = Math.sin(this.angle);
     const fwd  = this.vx * nfx + this.vy * nfy;
     const side = this.vx * -nfy + this.vy * nfx;
-    const keptSide = side * Math.pow(this.gripLoss, dt);
+    const keptSide = side * Math.pow(handbrake?.18:this.gripLoss, dt);
+    this.drifting=Math.abs(keptSide)>45 && this.speed>100;
     this.vx = nfx * fwd + (-nfy) * keptSide;
     this.vy = nfy * fwd + ( nfx) * keptSide;
 
     // --- drag ---
-    const d = Math.pow(this.drag, dt);
+    const d = Math.pow(this.drag, dt)*Math.exp(handbrake?-.65*dt:0);
     this.vx *= d; this.vy *= d;
 
     // --- clamp top speed ---
@@ -233,7 +239,7 @@ function update(dt) {
       crashEffect(p);
       break;
     } else if(Math.hypot(dx,dy)<65 && p.speed>180 && effects.cooldown===0){
-      effects.cooldown=1.1;burst(p.x,p.y,'#71e9ff',12);if(!reduced)cam.shake=4;
+      effects.cooldown=1.1; effects.near=.85; burst(p.x,p.y,'#71e9ff',12);if(!reduced)cam.shake=4;
     }
   }
 
@@ -276,6 +282,7 @@ function render() {
   const oy = H / 2 - cam.y + sy;
 
   drawDistrict(sctx,ox,oy);
+  drawWetRoad(sctx,ox,oy);
   drawEffects(sctx,ox,oy);
   // cops
   for (const c of game.cops) {
@@ -286,7 +293,9 @@ function render() {
   drawCar(sctx, p.x + ox, p.y + oy, p.angle, '#ff2d95');
 
   ctx.clearRect(0,0,W,H);ctx.drawImage(scene,0,0);
+  drawRain(ctx);
   drawImpact(ctx,p,ox,oy);
+  drawDrivingFeedback(ctx,p);
 
   /* ---------- HUD ---------- */
   document.getElementById('heatBar').style.width = clamp(game.heat * 2, 0, 100) + '%';

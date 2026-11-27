@@ -23,3 +23,15 @@ test('reduced effects and focus loss',()=>{
  assert.equal(b.run('reduced'),true);assert.ok(b.run('effects.sparks.length<=10'));assert.equal(b.run('cam.shake'),0);
  b.events.blur();assert.equal(b.run('keys.KeyW'),false);
 });
+
+test('handbrake permits controlled lateral slip without exceeding speed cap',()=>{
+ const b=boot();
+ const result=b.run("(()=>{function sample(handbrake){const p=new Car(0,0);p.vy=-300;keys.Space=handbrake;keys.KeyD=true;for(let n=0;n<24;n++)p.update(STEP);return {side:Math.abs(p.vx*-Math.sin(p.angle)+p.vy*Math.cos(p.angle)),speed:p.speed};}return [sample(false),sample(true)];})()");
+ assert.ok(result[1].side>result[0].side);assert.ok(result[1].speed<=430);
+});
+test('rain positions wrap and near-miss feedback expires',()=>{
+ const b=boot();
+ assert.equal(b.run('wrap(-5,100)'),95);
+ b.run('effects.near=.85;tickEffects(1);render()');
+ assert.equal(b.run('effects.near'),0);
+});
