@@ -178,7 +178,10 @@ function spawnCop() {
   const p = game.player;
   const a = Math.random() * Math.PI * 2;
   const dist = Math.max(W, H) * 0.8;
-  game.cops.push(new Cop(p.x + Math.cos(a) * dist, p.y + Math.sin(a) * dist));
+  // Spawn on a street centerline, never inside a roof.
+  const x=p.x+Math.cos(a)*dist,y=p.y+Math.sin(a)*dist;
+  const sx=Math.round(x/CITY_TILE)*CITY_TILE,sy=Math.round(y/CITY_TILE)*CITY_TILE;
+  game.cops.push(new Cop(sx,sy));
 }
 
 /* =========================================================
@@ -194,6 +197,7 @@ function update(dt) {
 
   const p = game.player;
   p.update(dt);
+  collideCity(p,true);
   game.elapsed += dt;
   recordTrail(p,dt);
 
@@ -212,7 +216,7 @@ function update(dt) {
   }
 
   // cops
-  for (const c of game.cops) c.update(dt, p);
+  for (const c of game.cops) { c.update(dt,p); collideCity(c,false); }
 
   // cop-cop separation (stops them stacking into one blob)
   for (let i = 0; i < game.cops.length; i++) {
@@ -292,10 +296,12 @@ function render() {
   // player
   drawCar(sctx, p.x + ox, p.y + oy, p.angle, '#ff2d95');
 
+  drawBuildings(sctx,ox,oy);
   ctx.clearRect(0,0,W,H);ctx.drawImage(scene,0,0);
   drawRain(ctx);
   drawImpact(ctx,p,ox,oy);
   drawDrivingFeedback(ctx,p);
+  drawWallFeedback(ctx);
 
   /* ---------- HUD ---------- */
   document.getElementById('heatBar').style.width = clamp(game.heat * 2, 0, 100) + '%';

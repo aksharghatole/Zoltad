@@ -4,7 +4,7 @@ const fxButton=document.getElementById('fx');
 function syncFX(){fxButton.textContent=reduced?'FX: LOW':'FX: FULL';fxButton.setAttribute('aria-pressed',String(reduced));}
 fxButton.addEventListener('click',()=>{reduced=!reduced;syncFX();});syncFX();
 const effects={};
-function resetEffects(){Object.assign(effects,{sparks:[],trails:[],rings:[],hit:0,cooldown:0,clock:0,near:0});}
+function resetEffects(){Object.assign(effects,{sparks:[],trails:[],rings:[],hit:0,cooldown:0,clock:0,near:0,wallCooldown:0,wallHit:0});}
 const random=(a,b)=>a+Math.random()*(b-a);
 function burst(x,y,color,count){
   if(reduced)count=Math.min(count,5);
@@ -15,6 +15,8 @@ function burst(x,y,color,count){
 function crashEffect(p){cam.shake=reduced?0:18;effects.hit=.15;burst(p.x,p.y,'#ffecbb',42);burst(p.x,p.y,'#ff397d',24);}
 function tickEffects(dt){
   effects.near=Math.max(0,effects.near-dt);
+  effects.wallCooldown=Math.max(0,effects.wallCooldown-dt);
+  effects.wallHit=Math.max(0,effects.wallHit-dt);
   effects.hit=Math.max(0,effects.hit-dt);effects.cooldown=Math.max(0,effects.cooldown-dt);cam.shake*=Math.exp(-12*dt);
   for(const p of effects.sparks){p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.exp(-4*dt);p.vy*=Math.exp(-4*dt);}
   for(const p of effects.trails)p.life-=dt;for(const r of effects.rings)r.life-=dt;
@@ -128,4 +130,12 @@ function drawDrivingFeedback(g,p){
   g.fillStyle=near?'#90f0ff':'#ff9fce';
   g.fillText(near?'CLOSE CALL //':'DRIFT //',W/2,H-42);
   g.restore();
+}
+
+function drawWallFeedback(g){
+  if(reduced||effects.wallHit<=0||game.state!=='playing')return;
+  const a=effects.wallHit/.12;
+  g.save();g.globalAlpha=.65*a;g.strokeStyle='#ffc27d';g.lineWidth=2;
+  g.beginPath();g.moveTo(12,90);g.lineTo(12,12);g.lineTo(90,12);
+  g.moveTo(W-90,H-12);g.lineTo(W-12,H-12);g.lineTo(W-12,H-90);g.stroke();g.restore();
 }

@@ -5,7 +5,7 @@ function boot(low=false){
  const els=new Map(),events={};
  function el(id){if(!els.has(id))els.set(id,{style:{},classList:{hidden:true,add(){this.hidden=true},remove(){this.hidden=false}},getContext:()=>ctx,setAttribute(){},addEventListener(){}});return els.get(id);}
  const box=vm.createContext({document:{getElementById:el,createElement:()=>el('scene'),addEventListener(){}},addEventListener:(k,f)=>events[k]=f,performance:{now:()=>0},requestAnimationFrame(){},matchMedia:()=>({matches:low})});
- for(const file of ['visuals.js','game.js'])vm.runInContext(fs.readFileSync(file,'utf8'),box);
+ for(const file of ['visuals.js','city.js','game.js'])vm.runInContext(fs.readFileSync(file,'utf8'),box);
  return {run:s=>vm.runInContext(s,box),els,events};
 }
 test('fixed step consistent at 30 and 120 Hz',()=>{
@@ -34,4 +34,20 @@ test('rain positions wrap and near-miss feedback expires',()=>{
  assert.equal(b.run('wrap(-5,100)'),95);
  b.run('effects.near=.85;tickEffects(1);render()');
  assert.equal(b.run('effects.near'),0);
+});
+
+test('city geometry matches roof bounds and resolves player wall collisions',()=>{
+ const b=boot();
+ const out=b.run("(()=>{const b=blockAt(1,0);const p=new Car(b.x-10,b.y+40);p.vx=300;collideCity(p,true);return {x:p.x,edge:b.x,vx:p.vx,wall:effects.wallHit};})()");
+ assert.ok(out.x<=out.edge-17);assert.ok(out.vx<0);assert.ok(out.wall>0);
+});
+test('car inside building resolves to exterior and patrol spawn stays on streets',()=>{
+ const b=boot();
+ assert.equal(b.run('blockAt(0,0)'),null);
+ assert.ok(b.run("(()=>{const z=blockAt(1,0),p=new Car(z.x+48,z.y+48);collideCity(p,true);return nearbyBlocks(p.x,p.y,p.radius).every(a=>!resolveBlock(p,a));})()"));
+ assert.ok(b.run("(()=>{for(let n=0;n<80;n++)spawnCop();return game.cops.every(c=>nearbyBlocks(c.x,c.y,c.radius).length===0);})()"));
+});
+test('police ricochet aligns with wall tangent',()=>{
+ const b=boot();
+ assert.ok(b.run("(()=>{const z=blockAt(1,0),c=new Cop(z.x-10,z.y+40);c.speed=300;collideCity(c,false);return c.speed===150&&c.x<z.x-17&&Math.abs(Math.cos(c.angle))<1e-6;})()"));
 });
