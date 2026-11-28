@@ -10,5 +10,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --check game.js && node --check visuals.js && node --check city.js
+      - run: node --check game.js && node --check visuals.js && node --check city.js && node --check living.js
       - run: node --test tests/game.test.cjs

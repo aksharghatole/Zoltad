@@ -5,7 +5,7 @@ function boot(low=false){
  const els=new Map(),events={};
  function el(id){if(!els.has(id))els.set(id,{style:{},classList:{hidden:true,add(){this.hidden=true},remove(){this.hidden=false}},getContext:()=>ctx,setAttribute(){},addEventListener(){}});return els.get(id);}
  const box=vm.createContext({document:{getElementById:el,createElement:()=>el('scene'),addEventListener(){}},addEventListener:(k,f)=>events[k]=f,performance:{now:()=>0},requestAnimationFrame(){},matchMedia:()=>({matches:low})});
- for(const file of ['visuals.js','city.js','game.js'])vm.runInContext(fs.readFileSync(file,'utf8'),box);
+ for(const file of ['visuals.js','city.js','living.js','game.js'])vm.runInContext(fs.readFileSync(file,'utf8'),box);
  return {run:s=>vm.runInContext(s,box),els,events};
 }
 test('fixed step consistent at 30 and 120 Hz',()=>{
@@ -101,4 +101,22 @@ test('boost trails remain bounded and clear on restart',()=>{
  b.run('game.player.boosting=true;for(let n=0;n<100;n++)recordBoost(game.player,.03);render()');
  assert.ok(b.run('effects.boostTrails.length<=48'));
  b.run('reset()');assert.equal(b.run('effects.boostTrails.length'),0);
+});
+
+test('districts vary building dimensions and retain safe traffic lanes',()=>{
+ const b=boot();
+ assert.ok(b.run("(()=>{const sizes=new Set();for(let x=-8;x<=8;x++)for(let y=-8;y<=8;y++){const z=blockAt(x,y);if(z){sizes.add(z.w+':'+z.h);if(nearbyBlocks(x*CITY_TILE+24,y*CITY_TILE+120,20).length)return false;}}return sizes.size>=3;})()"));
+});
+test('traffic follows continuous lanes and is bounded in local queries',()=>{
+ const b=boot();
+ assert.ok(b.run("(()=>{const a=trafficIn(0,0,500,300,10),z=trafficIn(0,0,500,300,10.1);let n=0;for(const c of a){const d=z.find(v=>v.id===c.id);if(d){n++;if(Math.abs(d.x-c.x-c.vx*.1)>1e-6||Math.abs(d.y-c.y-c.vy*.1)>1e-6)return false;}}return n>5&&a.length<100;})()"));
+});
+test('traffic collisions separate player, reduce relative impact speed and add heat once',()=>{
+ const b=boot();
+ assert.ok(b.run("(()=>{const p=new Car(0,0),c={x:24,y:0,vx:0,vy:0,angle:0,radius:14};p.vx=280;trafficContact(p,c);const heat=game.heat;if(Math.hypot(p.x-c.x,p.y-c.y)<31||p.speed>=280||heat!==3)return false;p.x=0;p.vx=280;trafficContact(p,c);return game.heat===heat;})()"));
+});
+test('nitro supply is collectible once and resets on restart',()=>{
+ const b=boot();
+ assert.ok(b.run("(()=>{let o;for(let x=-10;x<=10&&!o;x++)for(let y=-10;y<=10&&!o;y++)o=supplyAt(x,y);if(!o)return false;const p=new Car(o.x,o.y);p.nitro=10;updateLiving(p,STEP);const n=p.nitro;updateLiving(p,STEP);return n===45&&p.nitro===45&&living.supplies.has(o.id);})()"));
+ b.run('reset()');assert.equal(b.run('living.supplies.size'),0);
 });
