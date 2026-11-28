@@ -12,6 +12,10 @@ Nitro starts at 65%, drains while boosting and slowly recharges. Drifting and cl
 
 Speed increases heat and attracts pursuers. Solid neon-roofed buildings now block cars; wide roads and occasional open plazas remain traversable. Wall impacts cause ricochet and sparks without instantly ending the run. Street signs and barricades shatter at driving speed, with spinning fragments and minor speed loss. Police use local obstacle-aware waypoints and slow for turns.
 
+## Living city
+
+Explore four repeating procedural districts: Neon Core, Iron Yards, Night Market and Glass Heights. Building widths vary, making some streets narrower. Civilian traffic follows continuous lanes; collisions slow the player and add heat after a short starting grace period. Vehicles do not currently stop at intersections or collide with police. Road paint, shop signs and lamps add district character. Collect N2 supply cells in open plazas to restore up to 35 nitro points. Supplies reset on restart; distant older collections may respawn after the bounded history fills.
+
 Open index.html or serve the directory with a static HTTP server. No dependencies.
 Run `node --test tests/game.test.cjs` for simulation and rendering smoke tests.
 

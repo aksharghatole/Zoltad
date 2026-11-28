@@ -3,7 +3,8 @@ const CITY_TILE=240;
 function blockAt(ix,iy){
   const code=((ix*19+iy*37)%7+7)%7;
   if(code===0)return null;
-  return {x:ix*CITY_TILE+72,y:iy*CITY_TILE+72,w:96,h:96,code};
+  const d=districtAt(ix,iy),w=d.width,h=d.height;
+  return {x:ix*CITY_TILE+(CITY_TILE-w)/2,y:iy*CITY_TILE+(CITY_TILE-h)/2,w,h,code};
 }
 function nearbyBlocks(x,y,radius){
   const blocks=[];
@@ -56,7 +57,7 @@ function drawBuildings(g,ox,oy){
   g.save();
   for(let ix=x0;ix<=x1;ix++)for(let iy=y0;iy<=y1;iy++){
     const b=blockAt(ix,iy);if(!b)continue;
-    const x=b.x+ox,y=b.y+oy,accent=b.code%2?'#ce498e':'#42adbf';
+    const x=b.x+ox,y=b.y+oy,accent=districtAt(ix,iy).accent;
     g.fillStyle='rgba(0,0,0,.43)';g.fillRect(x+8,y+10,b.w,b.h);
     g.fillStyle='#080b13';g.fillRect(x,y,b.w,b.h);
     g.strokeStyle=accent;g.lineWidth=1.5;g.strokeRect(x+.75,y+.75,b.w-1.5,b.h-1.5);

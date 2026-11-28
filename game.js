@@ -197,6 +197,7 @@ function reset() {
   cam.x = 0; cam.y = 0; cam.shake = 0; cam.zoom=1;
   resetEffects();
   resetStreetObjects();
+  resetLiving();
   document.getElementById('busted').classList.add('hidden');
   spawnCop();
 }
@@ -231,6 +232,7 @@ function update(dt) {
   collideCity(p,true);
   collideStreetObjects(p,true);
   game.elapsed += dt;
+  updateLiving(p,dt);
   recordTrail(p,dt);
   recordBoost(p,dt);
 
@@ -324,6 +326,7 @@ function render() {
 
   drawDistrict(sctx,ox,oy);
   drawWetRoad(sctx,ox,oy);
+  drawCityLife(sctx,ox,oy);
   drawStreetObjects(sctx,ox,oy);
   drawEffects(sctx,ox,oy);
   drawBoost(sctx,ox,oy,p);
@@ -345,6 +348,7 @@ function render() {
   drawWallFeedback(ctx);
   drawSmashFeedback(ctx);
   drawBoostOverlay(ctx,p);
+  drawLivingNotice(ctx);
 
   /* ---------- HUD ---------- */
   document.getElementById('heatBar').style.width = clamp(game.heat * 2, 0, 100) + '%';
@@ -352,6 +356,8 @@ function render() {
   document.getElementById('time').textContent = game.elapsed.toFixed(1);
   document.getElementById('nitroBar').style.width = Math.round(p.nitro)+'%';
   document.getElementById('nitro').textContent = Math.round(p.nitro)+'%';
+  const district=districtOf(p.x,p.y);
+  document.getElementById('district').textContent=district.name+' // NIGHT SHIFT';
 }
 
 /* =========================================================
